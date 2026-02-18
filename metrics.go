@@ -8,16 +8,25 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/couchbase/gocb/v2"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 )
 
+// Counter mirrors the gocb.Counter interface
+type Counter interface {
+	IncrementBy(num uint64)
+}
+
+// ValueRecorder mirrors the gocb.ValueRecorder interface
+type ValueRecorder interface {
+	RecordValue(val uint64)
+}
+
 // OpenTelemetryMeter is an implementation of the gocb Meter interface which wraps an OpenTelemetry meter.
 type OpenTelemetryMeter struct {
 	wrapped       metric.Meter
-	counterCache  map[string]gocb.Counter
-	recorderCache map[string]gocb.ValueRecorder
+	counterCache  map[string]Counter
+	recorderCache map[string]ValueRecorder
 	lock          sync.Mutex
 	provider      metric.MeterProvider
 }
@@ -26,8 +35,8 @@ type OpenTelemetryMeter struct {
 func NewOpenTelemetryMeter(provider metric.MeterProvider) *OpenTelemetryMeter {
 	return &OpenTelemetryMeter{
 		wrapped:       provider.Meter("com.couchbase.client/go"),
-		counterCache:  make(map[string]gocb.Counter),
-		recorderCache: make(map[string]gocb.ValueRecorder),
+		counterCache:  make(map[string]Counter),
+		recorderCache: make(map[string]ValueRecorder),
 		provider:      provider,
 	}
 }
@@ -41,7 +50,7 @@ func (meter *OpenTelemetryMeter) Provider() metric.MeterProvider {
 }
 
 // Counter provides a wrapped OpenTelemetry Counter.
-func (meter *OpenTelemetryMeter) Counter(name string, tags map[string]string) (gocb.Counter, error) {
+func (meter *OpenTelemetryMeter) Counter(name string, tags map[string]string) (Counter, error) {
 	key := fmt.Sprintf("%s-%s", name, tags)
 	meter.lock.Lock()
 	counter := meter.counterCache[key]
@@ -66,7 +75,7 @@ func (meter *OpenTelemetryMeter) Counter(name string, tags map[string]string) (g
 }
 
 // ValueRecorder provides a wrapped OpenTelemetry ValueRecorder.
-func (meter *OpenTelemetryMeter) ValueRecorder(name string, tags map[string]string) (gocb.ValueRecorder, error) {
+func (meter *OpenTelemetryMeter) ValueRecorder(name string, tags map[string]string) (ValueRecorder, error) {
 	key := fmt.Sprintf("%s-%s", name, tags)
 
 	meter.lock.Lock()

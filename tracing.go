@@ -6,10 +6,21 @@ import (
 	"log"
 	"time"
 
-	"github.com/couchbase/gocb/v2"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 )
+
+// RequestSpanContext mirrors the gocb.RequestSpanContext interface
+type RequestSpanContext interface {
+}
+
+// RequestSpan mirrors the gocb.RequestSpan interface
+type RequestSpan interface {
+	End()
+	Context() RequestSpanContext
+	AddEvent(name string, timestamp time.Time)
+	SetAttribute(key string, value interface{})
+}
 
 // OpenTelemetryRequestTracer is an implementation of the gocb Tracer interface which wraps an OpenTelemetry tracer.
 type OpenTelemetryRequestTracer struct {
@@ -34,7 +45,7 @@ func (tracer *OpenTelemetryRequestTracer) Provider() trace.TracerProvider {
 }
 
 // RequestSpan provides a wrapped OpenTelemetry Span.
-func (tracer *OpenTelemetryRequestTracer) RequestSpan(parentContext gocb.RequestSpanContext, operationName string) gocb.RequestSpan {
+func (tracer *OpenTelemetryRequestTracer) RequestSpan(parentContext RequestSpanContext, operationName string) RequestSpan {
 	parentCtx := context.Background()
 	if ctx, ok := parentContext.(context.Context); ok {
 		parentCtx = ctx
@@ -67,7 +78,7 @@ func (span *OpenTelemetryRequestSpan) Wrapped() trace.Span {
 }
 
 // Context returns the RequestSpanContext for this span.
-func (span *OpenTelemetryRequestSpan) Context() gocb.RequestSpanContext {
+func (span *OpenTelemetryRequestSpan) Context() RequestSpanContext {
 	return span.ctx
 }
 

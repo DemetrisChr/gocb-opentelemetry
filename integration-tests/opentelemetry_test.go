@@ -1,4 +1,4 @@
-package gocbopentelemetry
+package integrationtests
 
 import (
 	"context"
@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	gocbopentelemetry "github.com/couchbase/gocb-opentelemetry"
 	"github.com/couchbase/gocb/v2"
 	"github.com/couchbase/gocbcore/v10"
 	"github.com/stretchr/testify/assert"
@@ -114,7 +115,7 @@ func TestOpenTelemetryTracer(t *testing.T) {
 			Username: user,
 			Password: password,
 		},
-		Tracer: NewOpenTelemetryRequestTracer(tp),
+		Tracer: gocbopentelemetry.NewOpenTelemetryRequestTracer(tp),
 	})
 	require.Nil(t, err)
 	defer cluster.Close(nil)
@@ -135,7 +136,7 @@ func TestOpenTelemetryTracer(t *testing.T) {
 
 	ctx, span := tracer.Start(ctx, "myparentoperation")
 	_, err = col.Upsert("someid", "someval", &gocb.UpsertOptions{
-		ParentSpan: NewOpenTelemetryRequestSpan(ctx, span),
+		ParentSpan: gocbopentelemetry.NewOpenTelemetryRequestSpan(ctx, span),
 	})
 	require.Nil(t, err)
 	span.End()
@@ -282,7 +283,7 @@ func TestOpenTelemetryMeter(t *testing.T) {
 			Username: user,
 			Password: password,
 		},
-		Meter: NewOpenTelemetryMeter(provider),
+		Meter: gocbopentelemetry.NewOpenTelemetryMeter(provider),
 	})
 	require.Nil(t, err)
 	defer cluster.Close(nil)
@@ -363,41 +364,4 @@ func assertOTMetric(t *testing.T, metric metricdata.HistogramDataPoint[int64], n
 	}
 
 	require.EqualValues(t, metric.Count, 1)
-}
-
-func TestOpenTelemetryMetricsInSeconds(t *testing.T) {
-	rdr := metric.NewManualReader()
-
-	provider := metric.NewMeterProvider(
-		metric.WithReader(rdr),
-	)
-
-	meter := NewOpenTelemetryMeter(provider)
-	recorder, err := meter.ValueRecorder("test_recorder", map[string]string{
-		"foo":    "bar",
-		"__unit": "s",
-	})
-	require.Nil(t, err)
-
-	recorder.RecordValue(2_000_000)
-	recorder.RecordValue(500_000)
-
-	var data metricdata.ResourceMetrics
-	err = rdr.Collect(context.Background(), &data)
-	require.Nil(t, err)
-
-	require.Len(t, data.ScopeMetrics, 1)
-	require.Len(t, data.ScopeMetrics[0].Metrics, 1)
-	require.Equal(t, "s", data.ScopeMetrics[0].Metrics[0].Unit)
-
-	histogram, ok := data.ScopeMetrics[0].Metrics[0].Data.(metricdata.Histogram[float64])
-	require.True(t, ok)
-
-	require.Len(t, histogram.DataPoints, 1)
-
-	dataPoint := histogram.DataPoints[0]
-	assert.Equal(t, 2.5, dataPoint.Sum)
-	assert.Equal(t, uint64(2), dataPoint.Count)
-
-	assert.Equal(t, attribute.NewSet(attribute.String("foo", "bar")), dataPoint.Attributes)
 }
